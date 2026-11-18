@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gauss-Jordan Lens — Escáner y Solucionador Paso a Paso</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .font-mono-math {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Animación estilo Google Circle to Search para el recuadro blanco */
+    @keyframes lensPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.58),
+                    0 0 22px rgba(255, 255, 255, 0.95),
+                    inset 0 0 14px rgba(255, 255, 255, 0.45);
+      }
+      50% {
+        box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.58),
+                    0 0 34px rgba(56, 189, 248, 0.95),
+                    inset 0 0 20px rgba(255, 255, 255, 0.7);
+      }
+    }
+
+    .lens-selection-box {
+      position: absolute;
+      border: 3px solid #ffffff;
+      border-radius: 16px;
+      pointer-events: none;
+      animation: lensPulse 2.2s infinite ease-in-out;
+      transition: border-radius 0.15s ease;
+    }
+
+    /* Esquinas blancas gruesas estilo Lens */
+    .lens-corner {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-color: #ffffff;
+      border-style: solid;
+    }
+    .lens-tl { top: -4px; left: -4px; border-width: 5px 0 0 5px; border-top-left-radius: 16px; }
+    .lens-tr { top: -4px; right: -4px; border-width: 5px 5px 0 0; border-top-right-radius: 16px; }
+    .lens-bl { bottom: -4px; left: -4px; border-width: 0 0 5px 5px; border-bottom-left-radius: 16px; }
+    .lens-br { bottom: -4px; right: -4px; border-width: 0 5px 5px 0; border-bottom-right-radius: 16px; }
+
+    /* Corchetes de matriz elegantes */
+    .matrix-bracket {
+      position: relative;
+      display: inline-flex;
+      align-items: stretch;
+      padding: 6px 12px;
+    }
+    .matrix-bracket::before,
+    .matrix-bracket::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 10px;
+      border: 2.5px solid #334155;
+    }
+    .matrix-bracket::before {
+      left: 0;
+      border-right: none;
+      border-radius: 8px 0 0 8px;
+    }
+    .matrix-bracket::after {
+      right: 0;
+      border-left: none;
+      border-radius: 0 8px 8px 0;
+    }
+
+    /* Scrollbar limpio para matrices anchas en móvil */
+    .custom-scroll::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Barra superior -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <!-- Icono Lens / Matriz -->
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2m8-16h2a2 2 0 012 2v2m0 8v2a2 2 0 01-2 2h-2" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">Gauss-Jordan Lens</h1>
+            <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">IA + Paso a Paso</span>
+          </div>
+          <p class="text-xs text-slate-500 hidden sm:block">Encierra cualquier matriz con el recuadro blanco o ingrésala manualmente</p>
+        </div>
+      </div>
+
+      <!-- Controles de formato global -->
+      <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <button id="btnModeDecimal" onclick="setDisplayMode('decimal')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-white text-slate-900 shadow-sm">
+          Decimales
+        </button>
+        <button id="btnModeFraction" onclick="setDisplayMode('fraction')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-600 hover:text-slate-900">
+          Fracciones exactas
+        </button>
+        <div id="decimalPrecisionBox" class="flex items-center gap-1 pl-2 pr-1 border-l border-slate-200">
+          <label for="decimalPlaces" class="text-[11px] font-medium text-slate-500">Dec:</label>
+          <select id="decimalPlaces" onchange="reRenderSolution()" class="bg-white border border-slate-200 rounded-md text-xs font-semibold px-1.5 py-0.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notificación flotante (sin alert()) -->
+  <div id="toastBanner" class="fixed bottom-5 right-5 z-50 hidden max-w-sm bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-start gap-3 transition-all">
+    <span id="toastIcon" class="text-lg leading-none mt-0.5">✨</span>
+    <div class="text-xs sm:text-sm leading-relaxed" id="toastMessage"></div>
+  </div>
+
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Selector de pestaña principal: Escáner Visual vs Matriz Manual -->
+    <div class="grid grid-cols-2 gap-2 p-1.5 bg-slate-200/70 rounded-2xl max-w-xl mx-auto border border-slate-200">
+      <button id="tabLens" onclick="switchInputTab('lens')" class="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition bg-white text-blue-700 shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <circle cx="12" cy="13" r="3" />
+        </svg>
+        <span>Escáner (Recuadro Blanco)</span>
+      </button>
+      <button id="tabManual" onclick="switchInputTab('manual')" class="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-600 hover:text-slate-900">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+        </svg>
+        <span>Matriz Manual (Cualquier Tamaño)</span>
+      </button>
+    </div>
+
+    <!-- SECCIÓN 1: ESCÁNER VISUAL (ESTILO GOOGLE LENS / CIRCLE TO SEARCH) -->
+    <section id="panelLens" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 sm:p-6 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
+            <span>Encierra la matriz con el recuadro blanco</span>
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Sube una foto de tu libro o cuaderno, o usa la hoja de ejemplo. Luego arrastra tu dedo o mouse para dibujar el recuadro blanco sobre el ejercicio.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Subir foto / captura</span>
+            <input type="file" id="imageUploader" accept="image/*" class="hidden" onchange="handleImageUpload(event)" />
+          </label>
+          <button onclick="loadSampleBookPage()" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition">
+            <span>Hoja de libro de ejemplo</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Área interactiva de selección estilo Lens -->
+      <div class="p-4 sm:p-6 bg-slate-900/95 flex flex-col items-center justify-center relative select-none">
+        <div id="lensInstructionPill" class="mb-3 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/25 text-white text-xs font-medium flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
+          <span>Desliza el dedo o el cursor sobre la matriz para crear el recuadro blanco</span>
+        </div>
+
+        <div id="imageStage" class="relative inline-block max-w-full overflow-hidden rounded-2xl border border-slate-700 shadow-2xl touch-none cursor-crosshair">
+          <img id="sourceImage" alt="Hoja de ejercicios" class="block max-h-[460px] w-auto max-w-full object-contain pointer-events-none" />
+
+          <!-- Recuadro blanco brillante estilo Circle to Search -->
+          <div id="selectionBox" class="lens-selection-box hidden">
+            <span class="lens-corner lens-tl"></span>
+            <span class="lens-corner lens-tr"></span>
+            <span class="lens-corner lens-bl"></span>
+            <span class="lens-corner lens-br"></span>
+            <div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-white text-slate-900 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow whitespace-nowrap">
+              Área seleccionada
+            </div>
+          </div>
+        </div>
+
+        <!-- Barra de acción cuando ya hay selección -->
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-3 w-full">
+          <button id="btnAnalyzeSelection" onclick="analyzeSelectedRegion()" disabled class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-white text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-sky-50 font-bold text-xs sm:text-sm shadow-lg transition">
+            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+            </svg>
+            <span id="btnAnalyzeText">Detectar y resolver recuadro</span>
+          </button>
+          <button onclick="clearSelectionBox()" class="px-4 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold border border-slate-700 transition">
+            Limpiar recuadro
+          </button>
+        </div>
+
+        <!-- Indicador de carga IA -->
+        <div id="aiLoadingOverlay" class="hidden absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center text-white p-6 text-center z-20">
+          <div class="w-12 h-12 rounded-2xl border-4 border-sky-400 border-t-transparent animate-spin mb-4"></div>
+          <p class="font-bold text-base">Analizando el recuadro blanco con Gemini...</p>
+          <p class="text-xs text-slate-300 mt-1 max-w-md">Extrayendo coeficientes, signos y términos independientes para armar tu matriz aumentada.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 2: EDITOR / VERIFICADOR DE MATRIZ (SIEMPRE DISPONIBLE PARA REVISAR O INGRESAR MANUALMENTE) -->
+    <section id="panelManual" class="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-5">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-900">Matriz Aumentada (Editable)</h2>
+          <p class="text-xs sm:text-sm text-slate-500">
+            Verifica los números detectados o arma cualquier sistema (cuadrado, rectangular, sin solución o con infinitas soluciones).
+          </p>
+        </div>
+
+        <!-- Selector de dimensiones y presets rápidos -->
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+            <label class="text-xs font-semibold text-slate-600">Filas (Ecuaciones):</label>
+            <input id="numRowsInput" type="number" min="1" max="10" value="5" onchange="resizeMatrixGrid()" class="w-12 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-center" />
+          </div>
+          <div class="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+            <label class="text-xs font-semibold text-slate-600">Incógnitas (x):</label>
+            <input id="numVarsInput" type="number" min="1" max="10" value="5" onchange="resizeMatrixGrid()" class="w-12 bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-center" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Ejemplos rápidos de todos los casos posibles -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs font-bold text-slate-500 mr-1">Cargar ejemplo:</span>
+        <button onclick="loadPreset('grossman62')" class="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition">
+          Ejercicio 62 (5×5 Grossman)
+        </button>
+        <button onclick="loadPreset('grossman61')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition">
+          Ejercicio 61 (3×3 Decimales)
+        </button>
+        <button onclick="loadPreset('unique3x3')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition">
+          3×3 Enteros (Solución única)
+        </button>
+        <button onclick="loadPreset('infinite')" class="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition">
+          Infinitas soluciones
+        </button>
+        <button onclick="loadPreset('nosolution')" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 text-xs font-semibold transition">
+          Sin solución (Inconsistente)
+        </button>
+      </div>
+
+      <!-- Cuadrícula editable de la matriz -->
+      <div class="overflow-x-auto custom-scroll py-2">
+        <div id="matrixEditorContainer" class="inline-block min-w-full"></div>
+      </div>
+
+      <!-- Botones de acción -->
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        <button onclick="clearMatrixValues()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition">
+          Poner todo en 0
+        </button>
+        <button onclick="solveCurrentMatrix()" class="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold shadow-md shadow-blue-600/20 transition">
+          <span>Resolver por Gauss-Jordan paso a paso</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 3: RESULTADOS Y PROCEDIMIENTO PASO A PASO -->
+    <section id="solutionSection" class="hidden space-y-6">
+
+      <!-- Tarjeta de Resumen de Resultados Finales -->
+      <div id="finalSummaryCard" class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-7">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-2.5">
+            <span id="solutionBadge" class="px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-emerald-100 text-emerald-800">
+              Solución Única Encontrada
+            </span>
+            <span id="stepCountBadge" class="text-xs font-semibold text-slate-500"></span>
+          </div>
+          <button onclick="copyResultsToClipboard()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>Copiar respuestas</span>
+          </button>
+        </div>
+
+        <div id="finalAnswersGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- Lista detallada de cada paso didáctico -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg sm:text-xl font-extrabold text-slate-900">Procedimiento Paso a Paso (Explicado Fácil)</h3>
+          <span class="text-xs text-slate-500 hidden sm:inline">Azul = Fila pivote (apoyo) · Ámbar = Fila que se limpia</span>
+        </div>
+
+        <div id="stepsContainer" class="space-y-5"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-5 mt-12 text-center text-xs text-slate-500">
+    Gauss-Jordan Lens — Método de eliminación Gauss-Jordan explicado con claridad para cualquier sistema de ecuaciones.
+  </footer>
+
+  <!-- Canvas oculto para recortar la selección del recuadro blanco -->
+  <canvas id="cropCanvas" class="hidden"></canvas>
+
+  <script>
+    // ============================================================================
+    // 1. ARITMÉTICA EXACTA CON FRACCIONES (BIGINT) PARA EVITAR ERRORES DE REDONDEO
+    // ============================================================================
+    function gcdBigInt(a, b) {
+      a = a < 0n ? -a : a;
+      b = b < 0n ? -b : b;
+      while (b !== 0n) {
+        const t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+
+    class Fraction {
+      constructor(num, den = 1n) {
+        if (typeof num === 'number') {
+          return Fraction.fromNumber(num);
+        }
+        if (den === 0n) throw new Error('División por cero');
+        if (den < 0n) {
+          num = -num;
+          den = -den;
+        }
+        if (num === 0n) {
+          this.n = 0n;
+          this.d = 1n;
+        } else {
+          const g = gcdBigInt(num, den);
+          this.n = num / g;
+          this.d = den / g;
+        }
+      }
+
+      static fromNumber(val) {
+        if (!Number.isFinite(val) || Math.abs(val) < 1e-14) {
+          return new Fraction(0n, 1n);
+        }
+        // Convertir decimal exacto a fracción (ej. 6.1 -> 61/10)
+        const str = val.toString();
+        if (!str.includes('e') && !str.includes('E')) {
+          const parts = str.split('.');
+          if (parts.length === 1) {
+            return new Fraction(BigInt(parts[0]), 1n);
+          }
+          const decLen = parts[1].length;
+          const den = 10n ** BigInt(decLen);
+          const num = BigInt(parts[0] + parts[1]);
+          return new Fraction(num, den);
+        }
+        // Fallback para notación científica
+        const precision = 1000000000n;
+        const num = BigInt(Math.round(val * 1e9));
+        return new Fraction(num, precision);
+      }
+
+      add(other) {
+        return new Fraction(this.n * other.d + other.n * this.d, this.d * other.d);
+      }
+
+      sub(other) {
+        return new Fraction(this.n * other.d - other.n * this.d, this.d * other.d);
+      }
+
+      mul(other) {
+        return new Fraction(this.n * other.n, this.d * other.d);
+      }
+
+      div(other) {
+        if (other.n === 0n) throw new Error('División entre cero');
+        return new Fraction(this.n * other.d, this.d * other.n);
+      }
+
+      neg() {
+        return new Fraction(-this.n, this.d);
+      }
+
+      isZero() {
+        return this.n === 0n;
+      }
+
+      isOne() {
+        return this.n === 1n && this.d === 1n;
+      }
+
+      toNumber() {
+        // División segura con alta precisión decimal
+        const scale = 1000000000000n;
+        const scaled = (this.n * scale) / this.d;
+        return Number(scaled) / 1e12;
+      }
+
+      toFractionString() {
+        if (this.d === 1n) return this.n.toString();
+        return `${this.n.toString()}/${this.d.toString()}`;
+      }
+    }
+
+    // ============================================================================
+    // 2. ESTADO GLOBAL DE LA APLICACIÓN
+    // ============================================================================
+    let displayMode = 'decimal'; // 'decimal' | 'fraction'
+    let matrixData = []; // Arreglo 2D de strings/números
+    let numRows = 5;
+    let numVars = 5;
+    let lastSolutionResult = null;
+
+    // Estado del selector visual estilo Google Lens
+    let isDrawingBox = false;
+    let startX = 0;
+    let startY = 0;
+    let currentSelection = null; // { x, y, w, h } en coordenadas del contenedor visual
+
+    // ============================================================================
+    // 3. UTILIDADES DE INTERFAZ Y FORMATEO
+    // ============================================================================
+    function showToast(message, icon = '✨') {
+      const banner = document.getElementById('toastBanner');
+      document.getElementById('toastIcon').textContent = icon;
+      document.getElementById('toastMessage').textContent = message;
+      banner.classList.remove('hidden');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        banner.classList.add('hidden');
+      }, 4500);
+    }
+
+    function formatFrac(frac) {
+      if (frac.isZero()) return '0';
+      if (displayMode === 'fraction') {
+        return frac.toFractionString();
+      }
+      const places = parseInt(document.getElementById('decimalPlaces').value, 10) || 4;
+      const num = frac.toNumber();
+      if (Math.abs(num - Math.round(num)) < 1e-10) {
+        return Math.round(num).toString();
+      }
+      // Eliminar ceros innecesarios a la derecha después del punto
+      return parseFloat(num.toFixed(places)).toString();
+    }
+
+    function setDisplayMode(mode) {
+      displayMode = mode;
+      const btnDec = document.getElementById('btnModeDecimal');
+      const btnFrac = document.getElementById('btnModeFraction');
+      const precBox = document.getElementById('decimalPrecisionBox');
+
+      if (mode === 'decimal') {
+        btnDec.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-white text-slate-900 shadow-sm';
+        btnFrac.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-600 hover:text-slate-900';
+        precBox.classList.remove('hidden');
+      } else {
+        btnFrac.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-white text-slate-900 shadow-sm';
+        btnDec.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-600 hover:text-slate-900';
+        precBox.classList.add('hidden');
+      }
+      reRenderSolution();
+    }
+
+    function switchInputTab(tab) {
+      const panelLens = document.getElementById('panelLens');
+      const tabLens = document.getElementById('tabLens');
+      const tabManual = document.getElementById('tabManual');
+
+      if (tab === 'lens') {
+        panelLens.classList.remove('hidden');
+        tabLens.className = 'flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition bg-white text-blue-700 shadow-sm';
+        tabManual.className = 'flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-600 hover:text-slate-900';
+      } else {
+        panelLens.classList.add('hidden');
+        tabManual.className = 'flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition bg-white text-blue-700 shadow-sm';
+        tabLens.className = 'flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-600 hover:text-slate-900';
+      }
+    }
+
+    // ============================================================================
+    // 4. IMAGEN DE EJEMPLO PRECARGADA (HOJA DE LIBRO CON EJERCICIOS 61 Y 62)
+    // ============================================================================
+    function loadSampleBookPage() {
+      // Generamos una imagen nítida en canvas con los ejercicios reales del libro
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 960;
+      tempCanvas.height = 600;
+      const ctx = tempCanvas.getContext('2d');
+
+      // Fondo papel de libro ligeramente cálido
+      ctx.fillStyle = '#f4f3ef';
+      ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+      // Encabezado estilo libro
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '600 16px Inter, sans-serif';
+      ctx.fillText('Álgebra Lineal · Sistemas de Ecuaciones Lineales (Gauss-Jordan)', 48, 42);
+
+      // Ejercicio 61
+      ctx.fillStyle = '#db2777';
+      ctx.font = 'bold 24px Georgia, serif';
+      ctx.fillText('61.', 48, 105);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '23px "JetBrains Mono", monospace';
+      ctx.fillText('  2.6x₁ - 4.3x₂ + 9.6x₃ = 21.62', 95, 105);
+      ctx.fillText(' -8.5x₁ + 3.6x₂ + 9.1x₃ = 14.23', 95, 145);
+      ctx.fillText(' 12.3x₁ - 8.4x₂ - 0.6x₃ = 12.61', 95, 185);
+
+      // Ejercicio 62
+      ctx.fillStyle = '#db2777';
+      ctx.font = 'bold 24px Georgia, serif';
+      ctx.fillText('62.', 48, 275);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '22px "JetBrains Mono", monospace';
+      ctx.fillText('  6.1x₁ -  2.4x₂ + 23.3x₃ - 16.4x₄ -  8.9x₅ =  121.7', 95, 275);
+      ctx.fillText('-14.2x₁ - 31.6x₂ -  5.8x₃ +  9.6x₄ + 23.1x₅ =  -87.7', 95, 320);
+      ctx.fillText(' 10.5x₁ + 46.1x₂ - 19.6x₃ -  8.8x₄ - 41.2x₅ =   10.8', 95, 365);
+      ctx.fillText(' 37.3x₁ - 14.2x₂ + 62.0x₃ + 14.7x₄ -  9.6x₅ =   61.3', 95, 410);
+      ctx.fillText('  0.8x₁ + 17.7x₂ - 47.5x₃ - 50.2x₄ + 29.8x₅ =  -27.8', 95, 455);
+
+      // Nota al pie
+      ctx.fillStyle = '#475569';
+      ctx.font = '18px Georgia, serif';
+      ctx.fillText('Sugerencia: Encuentre la forma escalonada reducida por renglones de la matriz aumentada.', 48, 535);
+
+      const img = document.getElementById('sourceImage');
+      img.src = tempCanvas.toDataURL('image/png');
+      clearSelectionBox();
+      showToast('Hoja de ejemplo cargada. Dibuja el recuadro blanco sobre el ejercicio 61 o 62.', '📘');
+    }
+
+    function handleImageUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const img = document.getElementById('sourceImage');
+        img.src = e.target.result;
+        clearSelectionBox();
+        showToast('Imagen cargada. Ahora encierra la matriz con el recuadro blanco.', '📸');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ============================================================================
+    // 5. LÓGICA DEL RECUADRO BLANCO INTERACTIVO (MOUSE + TÁCTIL)
+    // ============================================================================
+    function initLensInteraction() {
+      const stage = document.getElementById('imageStage');
+      const box = document.getElementById('selectionBox');
+
+      function getRelativeCoords(clientX, clientY) {
+        const rect = stage.getBoundingClientRect();
+        const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+        const y = Math.max(0, Math.min(clientY - rect.top, rect.height));
+        return { x, y };
+      }
+
+      function onStart(clientX, clientY) {
+        isDrawingBox = true;
+        const pos = getRelativeCoords(clientX, clientY);
+        startX = pos.x;
+        startY = pos.y;
+        currentSelection = { x: startX, y: startY, w: 0, h: 0 };
+        updateSelectionBoxUI();
+      }
+
+      function onMove(clientX, clientY) {
+        if (!isDrawingBox) return;
+        const pos = getRelativeCoords(clientX, clientY);
+        const x = Math.min(startX, pos.x);
+        const y = Math.min(startY, pos.y);
+        const w = Math.abs(pos.x - startX);
+        const h = Math.abs(pos.y - startY);
+        currentSelection = { x, y, w, h };
+        updateSelectionBoxUI();
+      }
+
+      function onEnd() {
+        if (!isDrawingBox) return;
+        isDrawingBox = false;
+        const btn = document.getElementById('btnAnalyzeSelection');
+        if (currentSelection && currentSelection.w > 20 && currentSelection.h > 20) {
+          btn.disabled = false;
+        } else {
+          clearSelectionBox();
+        }
+      }
+
+      // Eventos de Mouse
+      stage.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        onStart(e.clientX, e.clientY);
+      });
+      window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
+      window.addEventListener('mouseup', onEnd);
+
+      // Eventos Táctiles (Dedo en celular/tablet)
+      stage.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          e.preventDefault();
+          onStart(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+
+      stage.addEventListener('touchmove', (e) => {
+        if (isDrawingBox && e.touches.length === 1) {
+          e.preventDefault();
+          onMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: false });
+
+      stage.addEventListener('touchend', onEnd);
+    }
+
+    function updateSelectionBoxUI() {
+      const box = document.getElementById('selectionBox');
+      if (!currentSelection || (currentSelection.w < 4 && currentSelection.h < 4)) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+      box.style.left = `${currentSelection.x}px`;
+      box.style.top = `${currentSelection.y}px`;
+      box.style.width = `${currentSelection.w}px`;
+      box.style.height = `${currentSelection.h}px`;
+    }
+
+    function clearSelectionBox() {
+      currentSelection = null;
+      document.getElementById('selectionBox').classList.add('hidden');
+      document.getElementById('btnAnalyzeSelection').disabled = true;
+    }
+
+    // ============================================================================
+    // 6. EXTRACCIÓN CON GEMINI API DEL RECUADRO SELECCIONADO
+    // ============================================================================
+    async function analyzeSelectedRegion() {
+      const img = document.getElementById('sourceImage');
+      if (!img || !currentSelection || currentSelection.w < 20 || currentSelection.h < 20) {
+        showToast('Primero arrastra el recuadro blanco sobre la matriz en la imagen.', '👆');
+        return;
+      }
+
+      // Recortar en un canvas a resolución real de la imagen
+      const scaleX = img.naturalWidth / img.clientWidth;
+      const scaleY = img.naturalHeight / img.clientHeight;
+
+      const sx = Math.max(0, Math.floor(currentSelection.x * scaleX));
+      const sy = Math.max(0, Math.floor(currentSelection.y * scaleY));
+      const sw = Math.min(img.naturalWidth - sx, Math.ceil(currentSelection.w * scaleX));
+      const sh = Math.min(img.naturalHeight - sy, Math.ceil(currentSelection.h * scaleY));
+
+      const cropCanvas = document.getElementById('cropCanvas');
+      cropCanvas.width = sw;
+      cropCanvas.height = sh;
+      const ctx = cropCanvas.getContext('2d');
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      const base64Data = cropCanvas.toDataURL('image/png').split(',')[1];
+
+      const overlay = document.getElementById('aiLoadingOverlay');
+      overlay.classList.remove('hidden');
+
+      try {
+        const extractedMatrix = await extractMatrixWithGemini(base64Data);
+        if (extractedMatrix && extractedMatrix.length > 0 && extractedMatrix[0].length >= 2) {
+          numRows = extractedMatrix.length;
+          numVars = extractedMatrix[0].length - 1;
+          document.getElementById('numRowsInput').value = numRows;
+          document.getElementById('numVarsInput').value = numVars;
+          matrixData = extractedMatrix.map((row) => row.map((v) => String(v)));
+          renderMatrixEditor();
+          solveCurrentMatrix();
+          showToast(`¡Listo! Se detectó un sistema de ${numRows} ecuaciones y ${numVars} incógnitas.`, '🎯');
+          document.getElementById('solutionSection').scrollIntoView({ behavior: 'smooth' });
+        } else {
+          showToast('No se pudo leer una matriz válida en ese recuadro. Intenta abarcar todas las ecuaciones.', '⚠️');
+        }
+      } catch (err) {
+        showToast('Hubo un problema al analizar la imagen. Verifica tu conexión o edita los números manualmente.', '⚠️');
+      } finally {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    async function extractMatrixWithGemini(base64ImageData) {
+      const apiKey = "";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      const prompt = `Analiza esta imagen recortada que contiene un sistema de ecuaciones lineales o una matriz aumentada.
+Extrae TODOS los coeficientes numéricos exactos (con sus signos positivos o negativos) y los términos independientes del lado derecho del signo igual (=) para formar la matriz aumentada [A | b].
+Reglas importantes:
+1. Si falta una variable en una ecuación (por ejemplo, no aparece x2), pon 0 en esa posición.
+2. Si una variable aparece sola como "+ x3" o "- x2", su coeficiente es 1 o -1.
+3. No incluyas el número de ejercicio (como "61." o "62.") dentro de la matriz.
+4. Devuelve únicamente el JSON con la matriz aumentada de números.`;
+
+      const payload = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: base64ImageData
+                }
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              augmentedMatrix: {
+                type: "ARRAY",
+                description: "Filas de la matriz aumentada, donde el último elemento de cada fila es el término independiente después del signo igual.",
+                items: {
+                  type: "ARRAY",
+                  items: { type: "NUMBER" }
+                }
+              }
+            },
+            required: ["augmentedMatrix"]
+          }
+        }
+      };
+
+      // Reintentos con retroceso exponencial
+      const delays = [1000, 2000, 4000];
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const result = await response.json();
+          const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) throw new Error('Respuesta vacía');
+          const parsed = JSON.parse(text);
+          return parsed.augmentedMatrix;
+        } catch (error) {
+          if (attempt === delays.length) throw error;
+          await new Promise((r) => setTimeout(r, delays[attempt]));
+        }
+      }
+    }
+
+    // ============================================================================
+    // 7. EDITOR MANUAL DE LA MATRIZ AUMENTADA
+    // ============================================================================
+    function loadPreset(presetKey) {
+      if (presetKey === 'grossman62') {
+        numRows = 5;
+        numVars = 5;
+        matrixData = [
+          ['6.1', '-2.4', '23.3', '-16.4', '-8.9', '121.7'],
+          ['-14.2', '-31.6', '-5.8', '9.6', '23.1', '-87.7'],
+          ['10.5', '46.1', '-19.6', '-8.8', '-41.2', '10.8'],
+          ['37.3', '-14.2', '62.0', '14.7', '-9.6', '61.3'],
+          ['0.8', '17.7', '-47.5', '-50.2', '29.8', '-27.8']
+        ];
+      } else if (presetKey === 'grossman61') {
+        numRows = 3;
+        numVars = 3;
+        matrixData = [
+          ['2.6', '-4.3', '9.6', '21.62'],
+          ['-8.5', '3.6', '9.1', '14.23'],
+          ['12.3', '-8.4', '-0.6', '12.61']
+        ];
+      } else if (presetKey === 'unique3x3') {
+        numRows = 3;
+        numVars = 3;
+        matrixData = [
+          ['2', '1', '-1', '8'],
+          ['-3', '-1', '2', '-11'],
+          ['-2', '1', '2', '-3']
+        ];
+      } else if (presetKey === 'infinite') {
+        numRows = 3;
+        numVars = 3;
+        matrixData = [
+          ['1', '2', '-1', '4'],
+          ['2', '4', '-2', '8'],
+          ['3', '-1', '2', '5']
+        ];
+      } else if (presetKey === 'nosolution') {
+        numRows = 3;
+        numVars = 3;
+        matrixData = [
+          ['1', '1', '1', '6'],
+          ['2', '2', '2', '12'],
+          ['1', '1', '1', '9']
+        ];
+      }
+
+      document.getElementById('numRowsInput').value = numRows;
+      document.getElementById('numVarsInput').value = numVars;
+      renderMatrixEditor();
+      solveCurrentMatrix();
+    }
+
+    function resizeMatrixGrid() {
+      const rInput = parseInt(document.getElementById('numRowsInput').value, 10);
+      const vInput = parseInt(document.getElementById('numVarsInput').value, 10);
+      numRows = Math.max(1, Math.min(10, isNaN(rInput) ? 3 : rInput));
+      numVars = Math.max(1, Math.min(10, isNaN(vInput) ? 3 : vInput));
+      document.getElementById('numRowsInput').value = numRows;
+      document.getElementById('numVarsInput').value = numVars;
+
+      const newData = [];
+      for (let r = 0; r < numRows; r++) {
+        const row = [];
+        for (let c = 0; c < numVars + 1; c++) {
+          row.push(matrixData[r]?.[c] ?? '0');
+        }
+        newData.push(row);
+      }
+      matrixData = newData;
+      renderMatrixEditor();
+    }
+
+    function clearMatrixValues() {
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numVars + 1; c++) {
+          matrixData[r][c] = '0';
+        }
+      }
+      renderMatrixEditor();
+    }
+
+    function renderMatrixEditor() {
+      const container = document.getElementById('matrixEditorContainer');
+      let html = `<table class="border-collapse mx-auto"><thead><tr><th class="p-1.5 text-[11px] font-bold text-slate-400">Fila</th>`;
+
+      for (let c = 0; c < numVars; c++) {
+        html += `<th class="p-1.5 text-xs font-extrabold text-blue-700 font-mono-math">x<sub>${c + 1}</sub></th>`;
+      }
+      html += `<th class="p-1.5 text-xs font-extrabold text-emerald-700 border-l-2 border-slate-300 pl-3">= Resultado</th></tr></thead><tbody>`;
+
+      for (let r = 0; r < numRows; r++) {
+        html += `<tr><td class="pr-2 text-xs font-bold text-slate-400 text-right font-mono-math">F${r + 1}</td>`;
+        for (let c = 0; c < numVars + 1; c++) {
+          const isResultCol = c === numVars;
+          const borderClass = isResultCol ? 'border-l-2 border-slate-300 pl-3' : 'px-1';
+          const bgClass = isResultCol ? 'bg-emerald-50/60 focus:bg-white border-emerald-200' : 'bg-slate-50 focus:bg-white border-slate-200';
+          html += `<td class="py-1 ${borderClass}">
+            <input type="text" inputmode="decimal" value="${matrixData[r][c]}"
+              onchange="updateCell(${r}, ${c}, this.value)"
+              class="w-16 sm:w-20 px-2 py-2 text-center font-mono-math text-xs sm:text-sm font-semibold rounded-xl border ${bgClass} focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+          </td>`;
+        }
+        html += `</tr>`;
+      }
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
+
+    function updateCell(r, c, val) {
+      matrixData[r][c] = val.trim() === '' ? '0' : val.trim();
+    }
+
+    function parseFractionInput(str) {
+      const clean = String(str).replace(',', '.').trim();
+      if (clean.includes('/')) {
+        const parts = clean.split('/');
+        if (parts.length === 2) {
+          const n = parseFloat(parts[0]);
+          const d = parseFloat(parts[1]);
+          if (!isNaN(n) && !isNaN(d) && d !== 0) {
+            return Fraction.fromNumber(n).div(Fraction.fromNumber(d));
+          }
+        }
+      }
+      const num = parseFloat(clean);
+      if (isNaN(num)) return new Fraction(0n, 1n);
+      return Fraction.fromNumber(num);
+    }
+
+    // ============================================================================
+    // 8. MOTOR MATEMÁTICO GAUSS-JORDAN COMPLETO Y DIDÁCTICO
+    // ============================================================================
+    function cloneMatrix(M) {
+      return M.map((row) => row.slice());
+    }
+
+    function solveCurrentMatrix() {
+      // Construir matriz de fracciones exactas
+      const M = [];
+      for (let r = 0; r < numRows; r++) {
+        const row = [];
+        for (let c = 0; c < numVars + 1; c++) {
+          row.push(parseFractionInput(matrixData[r][c]));
+        }
+        M.push(row);
+      }
+
+      const steps = [];
+      steps.push({
+        type: 'initial',
+        title: 'Paso 0: Matriz Aumentada Inicial',
+        why: 'Acomodamos todos los coeficientes de las incógnitas a la izquierda de la línea vertical y los resultados (términos independientes) a la derecha.',
+        operationsDetail: [],
+        matrix: cloneMatrix(M),
+        pivotRow: -1,
+        pivotCol: -1,
+        targetRow: -1
+      });
+
+      let leadRow = 0;
+      for (let col = 0; col < numVars && leadRow < numRows; col++) {
+        // 1. Buscar un pivote distinto de cero en o debajo de leadRow
+        let pivotCandidate = leadRow;
+        while (pivotCandidate < numRows && M[pivotCandidate][col].isZero()) {
+          pivotCandidate++;
+        }
+
+        // Si toda la columna hacia abajo es 0, pasamos a la siguiente columna
+        if (pivotCandidate === numRows) {
+          continue;
+        }
+
+        // 2. Intercambiar filas si el pivote actual es 0
+        if (pivotCandidate !== leadRow) {
+          const temp = M[leadRow];
+          M[leadRow] = M[pivotCandidate];
+          M[pivotCandidate] = temp;
+
+          steps.push({
+            type: 'swap',
+            title: `Intercambiamos la Fila ${leadRow + 1} con la Fila ${pivotCandidate + 1}`,
+            why: `En la Fila ${leadRow + 1} (Columna ${col + 1}) había un 0, y no podemos dividir entre 0 para hacer el pivote 1. Por eso subimos la Fila ${pivotCandidate + 1} que sí tiene un número distinto de cero.`,
+            operationsDetail: [],
+            matrix: cloneMatrix(M),
+            pivotRow: leadRow,
+            pivotCol: col,
+            targetRow: pivotCandidate
+          });
+        }
+
+        // 3. Normalizar la fila pivote para convertir el pivote en 1
+        const pivotVal = M[leadRow][col];
+        if (!pivotVal.isOne()) {
+          const details = [];
+          for (let c = 0; c <= numVars; c++) {
+            const before = M[leadRow][c];
+            const after = before.div(pivotVal);
+            M[leadRow][c] = after;
+            const colLabel = c < numVars ? `x${c + 1}` : 'Resultado';
+            details.push({
+              colLabel,
+              expr: `${formatFrac(before)} ÷ ${formatFrac(pivotVal)}`,
+              res: formatFrac(after)
+            });
+          }
+
+          steps.push({
+            type: 'normalize',
+            title: `Convertimos el pivote de la Fila ${leadRow + 1} en 1`,
+            why: `Dividimos toda la Fila ${leadRow + 1} entre ${formatFrac(pivotVal)} (porque ${formatFrac(pivotVal)} ÷ ${formatFrac(pivotVal)} = 1). ¿Por qué? Para transformar el pivote en 1 y que toda esta fila nos sirva de apoyo para limpiar los números de arriba y abajo en esta columna.`,
+            operationsDetail: details,
+            matrix: cloneMatrix(M),
+            pivotRow: leadRow,
+            pivotCol: col,
+            targetRow: leadRow
+          });
+        }
+
+        // 4. Hacer ceros arriba y abajo del pivote en esta columna
+        for (let r = 0; r < numRows; r++) {
+          if (r === leadRow) continue;
+          const factor = M[r][col];
+          if (factor.isZero()) continue;
+
+          const invFactor = factor.neg();
+          const details = [];
+          for (let c = 0; c <= numVars; c++) {
+            const targetBefore = M[r][c];
+            const pivotCell = M[leadRow][c];
+            const after = targetBefore.add(invFactor.mul(pivotCell));
+            M[r][c] = after;
+
+            const colLabel = c < numVars ? `x${c + 1}` : 'Resultado';
+            const signStr = invFactor.n >= 0n ? `+ ${formatFrac(invFactor)}` : `- ${formatFrac(invFactor.neg())}`;
+            details.push({
+              colLabel,
+              expr: `${formatFrac(targetBefore)} ${signStr} × (${formatFrac(pivotCell)})`,
+              res: formatFrac(after)
+            });
+          }
+
+          const signWord = invFactor.n >= 0n
+            ? `sumamos ${formatFrac(invFactor)} veces la Fila ${leadRow + 1}`
+            : `restamos ${formatFrac(invFactor.neg())} veces la Fila ${leadRow + 1}`;
+
+          steps.push({
+            type: 'eliminate',
+            title: `Hacemos 0 el número de la Fila ${r + 1} (Columna ${col + 1})`,
+            why: `Como en la Fila ${r + 1} tenemos ${formatFrac(factor)}, ${signWord} (apoyándonos en el 1 que acabamos de conseguir en la Fila ${leadRow + 1}). Así eliminamos ese ${formatFrac(factor)} sin descomponer los ceros anteriores.`,
+            operationsDetail: details,
+            matrix: cloneMatrix(M),
+            pivotRow: leadRow,
+            pivotCol: col,
+            targetRow: r
+          });
+        }
+
+        leadRow++;
+      }
+
+      // 5. Analizar el tipo de solución en la forma escalonada reducida (RREF)
+      const analysis = analyzeRREF(M, numRows, numVars);
+
+      lastSolutionResult = {
+        steps,
+        finalMatrix: M,
+        analysis
+      };
+
+      reRenderSolution();
+      document.getElementById('solutionSection').classList.remove('hidden');
+    }
+
+    function analyzeRREF(M, rows, vars) {
+      // Verificar inconsistencia: fila [0, 0, ..., 0 | b] con b != 0
+      for (let r = 0; r < rows; r++) {
+        let allZeroCoeff = true;
+        for (let c = 0; c < vars; c++) {
+          if (!M[r][c].isZero()) {
+            allZeroCoeff = false;
+            break;
+          }
+        }
+        if (allZeroCoeff && !M[r][vars].isZero()) {
+          return {
+            status: 'inconsistent',
+            inconsistentRow: r + 1,
+            rhsValue: M[r][vars]
+          };
+        }
+      }
+
+      // Identificar columnas pivote y variables libres
+      const pivotColForRow = new Array(rows).fill(-1);
+      const isPivotCol = new Array(vars).fill(false);
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < vars; c++) {
+          if (!M[r][c].isZero()) {
+            pivotColForRow[r] = c;
+            isPivotCol[c] = true;
+            break;
+          }
+        }
+      }
+
+      const freeVars = [];
+      for (let c = 0; c < vars; c++) {
+        if (!isPivotCol[c]) freeVars.push(c);
+      }
+
+      if (freeVars.length === 0) {
+        // Solución única
+        const values = new Array(vars).fill(new Fraction(0n, 1n));
+        for (let r = 0; r < rows; r++) {
+          const pCol = pivotColForRow[r];
+          if (pCol !== -1) {
+            values[pCol] = M[r][vars];
+          }
+        }
+        return {
+          status: 'unique',
+          values
+        };
+      } else {
+        // Infinitas soluciones (paramétricas)
+        const parametric = [];
+        for (let c = 0; c < vars; c++) {
+          if (!isPivotCol[c]) {
+            parametric.push({
+              varIndex: c,
+              isFree: true,
+              constant: new Fraction(0n, 1n),
+              terms: []
+            });
+          } else {
+            // Encontrar su fila pivote
+            const r = pivotColForRow.indexOf(c);
+            const constant = M[r][vars];
+            const terms = [];
+            for (const fCol of freeVars) {
+              const coeff = M[r][fCol].neg();
+              if (!coeff.isZero()) {
+                terms.push({ freeVarIndex: fCol, coeff });
+              }
+            }
+            parametric.push({
+              varIndex: c,
+              isFree: false,
+              constant,
+              terms
+            });
+          }
+        }
+        return {
+          status: 'infinite',
+          freeVars,
+          parametric
+        };
+      }
+    }
+
+    // ============================================================================
+    // 9. RENDERIZADO VISUAL DE RESULTADOS Y TARJETAS PASO A PASO
+    // ============================================================================
+    function reRenderSolution() {
+      if (!lastSolutionResult) return;
+      const { steps, analysis } = lastSolutionResult;
+
+      const badge = document.getElementById('solutionBadge');
+      const stepCountBadge = document.getElementById('stepCountBadge');
+      const answersGrid = document.getElementById('finalAnswersGrid');
+
+      stepCountBadge.textContent = `${steps.length - 1} operaciones realizadas`;
+
+      if (analysis.status === 'inconsistent') {
+        badge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-rose-100 text-rose-800';
+        badge.textContent = 'Sistema Sin Solución (Inconsistente)';
+        answersGrid.innerHTML = `
+          <div class="col-span-full p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-sm leading-relaxed">
+            <p class="font-bold mb-1">No existe solución para este sistema.</p>
+            <p>En la <strong>Fila ${analysis.inconsistentRow}</strong> llegamos a una contradicción matemática: todos los coeficientes de las variables se hicieron <strong>0</strong>, pero del lado derecho quedó <strong>${formatFrac(analysis.rhsValue)}</strong> (es decir, <span class="font-mono-math font-bold">0 = ${formatFrac(analysis.rhsValue)}</span>, lo cual es imposible).</p>
+          </div>
+        `;
+      } else if (analysis.status === 'unique') {
+        badge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-emerald-100 text-emerald-800';
+        badge.textContent = 'Solución Única Encontrada';
+        answersGrid.innerHTML = analysis.values
+          .map((val, idx) => `
+            <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <span class="font-mono-math font-bold text-slate-600 text-sm">x<sub>${idx + 1}</sub> =</span>
+              <span class="font-mono-math font-extrabold text-blue-700 text-base sm:text-lg">${formatFrac(val)}</span>
+            </div>
+          `)
+          .join('');
+      } else {
+        badge.className = 'px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wide bg-amber-100 text-amber-800';
+        badge.textContent = 'Infinitas Soluciones (Sistema Indeterminado)';
+        answersGrid.innerHTML = analysis.parametric
+          .map((item) => {
+            if (item.isFree) {
+              return `
+                <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-amber-50/70 border border-amber-200">
+                  <span class="font-mono-math font-bold text-slate-700 text-sm">x<sub>${item.varIndex + 1}</sub></span>
+                  <span class="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-lg">Variable libre (cualquier valor)</span>
+                </div>
+              `;
+            }
+            let exprParts = [];
+            if (!item.constant.isZero() || item.terms.length === 0) {
+              exprParts.push(formatFrac(item.constant));
+            }
+            for (const t of item.terms) {
+              const absStr = formatFrac(t.coeff.n < 0n ? t.coeff.neg() : t.coeff);
+              const coeffDisplay = absStr === '1' ? '' : absStr;
+              if (exprParts.length === 0) {
+                exprParts.push(`${t.coeff.n < 0n ? '-' : ''}${coeffDisplay}x${t.freeVarIndex + 1}`);
+              } else {
+                exprParts.push(`${t.coeff.n < 0n ? ' - ' : ' + '}${coeffDisplay}x${t.freeVarIndex + 1}`);
+              }
+            }
+            return `
+              <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span class="font-mono-math font-bold text-slate-600 text-sm">x<sub>${item.varIndex + 1}</sub> =</span>
+                <span class="font-mono-math font-extrabold text-indigo-700 text-sm sm:text-base">${exprParts.join('')}</span>
+              </div>
+            `;
+          })
+          .join('');
+      }
+
+      // Renderizar cada paso
+      const stepsContainer = document.getElementById('stepsContainer');
+      stepsContainer.innerHTML = steps
+        .map((step, index) => {
+          const stepNumberLabel = index === 0 ? 'Inicio' : `Paso ${index}`;
+          const badgeColor =
+            step.type === 'normalize'
+              ? 'bg-blue-100 text-blue-800'
+              : step.type === 'eliminate'
+              ? 'bg-amber-100 text-amber-800'
+              : step.type === 'swap'
+              ? 'bg-purple-100 text-purple-800'
+              : 'bg-slate-200 text-slate-800';
+
+          // Detalle columna por columna (si aplica)
+          let detailHtml = '';
+          if (step.operationsDetail && step.operationsDetail.length > 0) {
+            detailHtml = `
+              <div class="mt-3 bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Cálculo número por número en esa fila:</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  ${step.operationsDetail
+                    .map(
+                      (d) => `
+                    <div class="bg-white px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono-math flex items-center justify-between gap-2">
+                      <span class="text-slate-400 font-bold">${d.colLabel}:</span>
+                      <span class="text-slate-700 truncate">${d.expr} = <strong class="text-slate-900">${d.res}</strong></span>
+                    </div>
+                  `
+                    )
+                    .join('')}
+                </div>
+              </div>
+            `;
+          }
+
+          // Matriz visual con resaltado de filas
+          const matrixHtml = renderStepMatrix(step);
+
+          return `
+            <article class="bg-white rounded-3xl border border-slate-200 shadow-sm p-4 sm:p-6">
+              <div class="flex flex-wrap items-center gap-2.5 mb-2">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold ${badgeColor}">${stepNumberLabel}</span>
+                <h4 class="text-sm sm:text-base font-bold text-slate-900">${step.title}</h4>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">${step.why}</p>
+              ${detailHtml}
+              <div class="mt-4 overflow-x-auto custom-scroll pb-1">
+                ${matrixHtml}
+              </div>
+            </article>
+          `;
+        })
+        .join('');
+    }
+
+    function renderStepMatrix(step) {
+      const M = step.matrix;
+      const rows = M.length;
+      const cols = M[0].length;
+      const vars = cols - 1;
+
+      let html = `<div class="matrix-bracket mx-auto"><table class="border-collapse font-mono-math text-xs sm:text-sm"><tbody>`;
+
+      for (let r = 0; r < rows; r++) {
+        let rowBg = '';
+        if (r === step.targetRow && step.type === 'eliminate') {
+          rowBg = 'bg-amber-50/90';
+        } else if (r === step.pivotRow && (step.type === 'normalize' || step.type === 'eliminate')) {
+          rowBg = 'bg-blue-50/80';
+        }
+
+        html += `<tr class="${rowBg}">`;
+        for (let c = 0; c < cols; c++) {
+          const isDivider = c === vars;
+          const isPivotCell = r === step.pivotRow && c === step.pivotCol;
+          const isTargetCell = r === step.targetRow && c === step.pivotCol && step.type === 'eliminate';
+
+          let cellStyle = 'px-2.5 sm:px-3.5 py-1.5 text-right whitespace-nowrap ';
+          if (isDivider) {
+            cellStyle += 'border-l-2 border-slate-400 pl-3.5 sm:pl-4 font-bold text-slate-900 ';
+          } else {
+            cellStyle += 'text-slate-700 ';
+          }
+
+          if (isPivotCell) {
+            cellStyle += 'font-extrabold text-blue-700 underline decoration-2 underline-offset-4 ';
+          } else if (isTargetCell) {
+            cellStyle += 'font-extrabold text-amber-700 ';
+          }
+
+          html += `<td class="${cellStyle}">${formatFrac(M[r][c])}</td>`;
+        }
+        html += `</tr>`;
+      }
+
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function copyResultsToClipboard() {
+      if (!lastSolutionResult) return;
+      const { analysis } = lastSolutionResult;
+      let text = '';
+      if (analysis.status === 'inconsistent') {
+        text = 'Sistema sin solución (inconsistente).';
+      } else if (analysis.status === 'unique') {
+        text = analysis.values.map((v, i) => `x${i + 1} = ${formatFrac(v)}`).join('\n');
+      } else {
+        text = 'Sistema con infinitas soluciones.';
+      }
+
+      const tempArea = document.createElement('textarea');
+      tempArea.value = text;
+      document.body.appendChild(tempArea);
+      tempArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempArea);
+      showToast('Respuestas copiadas al portapapeles.', '📋');
+    }
+
+    // ============================================================================
+    // 10. INICIALIZACIÓN AL CARGAR LA PÁGINA
+    // ============================================================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initLensInteraction();
+      loadSampleBookPage();
+      loadPreset('grossman62');
+    });
+  </script>
+</body>
+</html>
