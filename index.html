@@ -239,7 +239,7 @@
         <div>
           <h2 class="text-base sm:text-lg font-bold text-slate-900">Matriz Aumentada (Editable)</h2>
           <p class="text-xs sm:text-sm text-slate-500">
-            Verifica los números detectados o arma cualquier sistema (cuadrado, rectangular, sin solución o con infinitas soluciones).
+            Verifica los números detectados o arma cualquier sistema (cuadrado, rectangular, sin solución o con infinitas soluciones). Puedes escribir signos <strong>+</strong>, <strong>-</strong>, decimales y fracciones (ej. <code>-3/4</code>).
           </p>
         </div>
 
@@ -283,9 +283,14 @@
 
       <!-- Botones de acción -->
       <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-        <button onclick="clearMatrixValues()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition">
-          Poner todo en 0
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="clearMatrixValues()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-semibold transition">
+            Poner todo en 0
+          </button>
+          <button type="button" onclick="toggleSignActiveCell()" class="px-3.5 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs sm:text-sm font-bold transition" title="Cambia entre positivo (+) y negativo (-) la celda seleccionada">
+            ± Cambiar signo
+          </button>
+        </div>
         <button onclick="solveCurrentMatrix()" class="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold shadow-md shadow-blue-600/20 transition">
           <span>Resolver por Gauss-Jordan paso a paso</span>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
@@ -378,7 +383,6 @@
         if (!Number.isFinite(val) || Math.abs(val) < 1e-14) {
           return new Fraction(0n, 1n);
         }
-        // Convertir decimal exacto a fracción (ej. 6.1 -> 61/10)
         const str = val.toString();
         if (!str.includes('e') && !str.includes('E')) {
           const parts = str.split('.');
@@ -390,7 +394,6 @@
           const num = BigInt(parts[0] + parts[1]);
           return new Fraction(num, den);
         }
-        // Fallback para notación científica
         const precision = 1000000000n;
         const num = BigInt(Math.round(val * 1e9));
         return new Fraction(num, precision);
@@ -426,7 +429,6 @@
       }
 
       toNumber() {
-        // División segura con alta precisión decimal
         const scale = 1000000000000n;
         const scaled = (this.n * scale) / this.d;
         return Number(scaled) / 1e12;
@@ -441,17 +443,17 @@
     // ============================================================================
     // 2. ESTADO GLOBAL DE LA APLICACIÓN
     // ============================================================================
-    let displayMode = 'decimal'; // 'decimal' | 'fraction'
-    let matrixData = []; // Arreglo 2D de strings/números
+    let displayMode = 'decimal';
+    let matrixData = [];
     let numRows = 5;
     let numVars = 5;
     let lastSolutionResult = null;
+    let activeCellCoords = { r: 0, c: 0 };
 
-    // Estado del selector visual estilo Google Lens
     let isDrawingBox = false;
     let startX = 0;
     let startY = 0;
-    let currentSelection = null; // { x, y, w, h } en coordenadas del contenedor visual
+    let currentSelection = null;
 
     // ============================================================================
     // 3. UTILIDADES DE INTERFAZ Y FORMATEO
@@ -477,7 +479,6 @@
       if (Math.abs(num - Math.round(num)) < 1e-10) {
         return Math.round(num).toString();
       }
-      // Eliminar ceros innecesarios a la derecha después del punto
       return parseFloat(num.toFixed(places)).toString();
     }
 
@@ -519,22 +520,18 @@
     // 4. IMAGEN DE EJEMPLO PRECARGADA (HOJA DE LIBRO CON EJERCICIOS 61 Y 62)
     // ============================================================================
     function loadSampleBookPage() {
-      // Generamos una imagen nítida en canvas con los ejercicios reales del libro
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = 960;
       tempCanvas.height = 600;
       const ctx = tempCanvas.getContext('2d');
 
-      // Fondo papel de libro ligeramente cálido
       ctx.fillStyle = '#f4f3ef';
       ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-      // Encabezado estilo libro
       ctx.fillStyle = '#94a3b8';
       ctx.font = '600 16px Inter, sans-serif';
       ctx.fillText('Álgebra Lineal · Sistemas de Ecuaciones Lineales (Gauss-Jordan)', 48, 42);
 
-      // Ejercicio 61
       ctx.fillStyle = '#db2777';
       ctx.font = 'bold 24px Georgia, serif';
       ctx.fillText('61.', 48, 105);
@@ -545,7 +542,6 @@
       ctx.fillText(' -8.5x₁ + 3.6x₂ + 9.1x₃ = 14.23', 95, 145);
       ctx.fillText(' 12.3x₁ - 8.4x₂ - 0.6x₃ = 12.61', 95, 185);
 
-      // Ejercicio 62
       ctx.fillStyle = '#db2777';
       ctx.font = 'bold 24px Georgia, serif';
       ctx.fillText('62.', 48, 275);
@@ -558,7 +554,6 @@
       ctx.fillText(' 37.3x₁ - 14.2x₂ + 62.0x₃ + 14.7x₄ -  9.6x₅ =   61.3', 95, 410);
       ctx.fillText('  0.8x₁ + 17.7x₂ - 47.5x₃ - 50.2x₄ + 29.8x₅ =  -27.8', 95, 455);
 
-      // Nota al pie
       ctx.fillStyle = '#475569';
       ctx.font = '18px Georgia, serif';
       ctx.fillText('Sugerencia: Encuentre la forma escalonada reducida por renglones de la matriz aumentada.', 48, 535);
@@ -587,7 +582,6 @@
     // ============================================================================
     function initLensInteraction() {
       const stage = document.getElementById('imageStage');
-      const box = document.getElementById('selectionBox');
 
       function getRelativeCoords(clientX, clientY) {
         const rect = stage.getBoundingClientRect();
@@ -627,7 +621,6 @@
         }
       }
 
-      // Eventos de Mouse
       stage.addEventListener('mousedown', (e) => {
         e.preventDefault();
         onStart(e.clientX, e.clientY);
@@ -635,7 +628,6 @@
       window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
       window.addEventListener('mouseup', onEnd);
 
-      // Eventos Táctiles (Dedo en celular/tablet)
       stage.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
           e.preventDefault();
@@ -682,7 +674,6 @@
         return;
       }
 
-      // Recortar en un canvas a resolución real de la imagen
       const scaleX = img.naturalWidth / img.clientWidth;
       const scaleY = img.naturalHeight / img.clientHeight;
 
@@ -770,7 +761,6 @@ Reglas importantes:
         }
       };
 
-      // Reintentos con retroceso exponencial
       const delays = [1000, 2000, 4000];
       for (let attempt = 0; attempt <= delays.length; attempt++) {
         try {
@@ -875,6 +865,27 @@ Reglas importantes:
       renderMatrixEditor();
     }
 
+    function toggleSignActiveCell() {
+      const { r, c } = activeCellCoords;
+      const input = document.getElementById(`cell-${r}-${c}`);
+      if (!input) return;
+
+      let val = input.value.trim();
+      if (!val || val === '0') {
+        val = '-';
+      } else if (val.startsWith('-')) {
+        val = val.slice(1) || '0';
+      } else if (val.startsWith('+')) {
+        val = '-' + val.slice(1);
+      } else {
+        val = '-' + val;
+      }
+
+      input.value = val;
+      matrixData[r][c] = val === '-' ? '0' : val;
+      input.focus();
+    }
+
     function renderMatrixEditor() {
       const container = document.getElementById('matrixEditorContainer');
       let html = `<table class="border-collapse mx-auto"><thead><tr><th class="p-1.5 text-[11px] font-bold text-slate-400">Fila</th>`;
@@ -891,7 +902,10 @@ Reglas importantes:
           const borderClass = isResultCol ? 'border-l-2 border-slate-300 pl-3' : 'px-1';
           const bgClass = isResultCol ? 'bg-emerald-50/60 focus:bg-white border-emerald-200' : 'bg-slate-50 focus:bg-white border-slate-200';
           html += `<td class="py-1 ${borderClass}">
-            <input type="text" inputmode="decimal" value="${matrixData[r][c]}"
+            <input id="cell-${r}-${c}" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+              value="${matrixData[r][c]}"
+              onfocus="activeCellCoords = { r: ${r}, c: ${c} }"
+              oninput="matrixData[${r}][${c}] = this.value"
               onchange="updateCell(${r}, ${c}, this.value)"
               class="w-16 sm:w-20 px-2 py-2 text-center font-mono-math text-xs sm:text-sm font-semibold rounded-xl border ${bgClass} focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
           </td>`;
@@ -903,11 +917,13 @@ Reglas importantes:
     }
 
     function updateCell(r, c, val) {
-      matrixData[r][c] = val.trim() === '' ? '0' : val.trim();
+      const trimmed = val.trim();
+      matrixData[r][c] = (trimmed === '' || trimmed === '+' || trimmed === '-') ? '0' : trimmed;
     }
 
     function parseFractionInput(str) {
       const clean = String(str).replace(',', '.').trim();
+      if (!clean || clean === '+' || clean === '-') return new Fraction(0n, 1n);
       if (clean.includes('/')) {
         const parts = clean.split('/');
         if (parts.length === 2) {
@@ -931,7 +947,6 @@ Reglas importantes:
     }
 
     function solveCurrentMatrix() {
-      // Construir matriz de fracciones exactas
       const M = [];
       for (let r = 0; r < numRows; r++) {
         const row = [];
@@ -955,18 +970,15 @@ Reglas importantes:
 
       let leadRow = 0;
       for (let col = 0; col < numVars && leadRow < numRows; col++) {
-        // 1. Buscar un pivote distinto de cero en o debajo de leadRow
         let pivotCandidate = leadRow;
         while (pivotCandidate < numRows && M[pivotCandidate][col].isZero()) {
           pivotCandidate++;
         }
 
-        // Si toda la columna hacia abajo es 0, pasamos a la siguiente columna
         if (pivotCandidate === numRows) {
           continue;
         }
 
-        // 2. Intercambiar filas si el pivote actual es 0
         if (pivotCandidate !== leadRow) {
           const temp = M[leadRow];
           M[leadRow] = M[pivotCandidate];
@@ -984,7 +996,6 @@ Reglas importantes:
           });
         }
 
-        // 3. Normalizar la fila pivote para convertir el pivote en 1
         const pivotVal = M[leadRow][col];
         if (!pivotVal.isOne()) {
           const details = [];
@@ -1012,7 +1023,6 @@ Reglas importantes:
           });
         }
 
-        // 4. Hacer ceros arriba y abajo del pivote en esta columna
         for (let r = 0; r < numRows; r++) {
           if (r === leadRow) continue;
           const factor = M[r][col];
@@ -1054,7 +1064,6 @@ Reglas importantes:
         leadRow++;
       }
 
-      // 5. Analizar el tipo de solución en la forma escalonada reducida (RREF)
       const analysis = analyzeRREF(M, numRows, numVars);
 
       lastSolutionResult = {
@@ -1068,7 +1077,6 @@ Reglas importantes:
     }
 
     function analyzeRREF(M, rows, vars) {
-      // Verificar inconsistencia: fila [0, 0, ..., 0 | b] con b != 0
       for (let r = 0; r < rows; r++) {
         let allZeroCoeff = true;
         for (let c = 0; c < vars; c++) {
@@ -1086,7 +1094,6 @@ Reglas importantes:
         }
       }
 
-      // Identificar columnas pivote y variables libres
       const pivotColForRow = new Array(rows).fill(-1);
       const isPivotCol = new Array(vars).fill(false);
 
@@ -1106,7 +1113,6 @@ Reglas importantes:
       }
 
       if (freeVars.length === 0) {
-        // Solución única
         const values = new Array(vars).fill(new Fraction(0n, 1n));
         for (let r = 0; r < rows; r++) {
           const pCol = pivotColForRow[r];
@@ -1119,7 +1125,6 @@ Reglas importantes:
           values
         };
       } else {
-        // Infinitas soluciones (paramétricas)
         const parametric = [];
         for (let c = 0; c < vars; c++) {
           if (!isPivotCol[c]) {
@@ -1130,7 +1135,6 @@ Reglas importantes:
               terms: []
             });
           } else {
-            // Encontrar su fila pivote
             const r = pivotColForRow.indexOf(c);
             const constant = M[r][vars];
             const terms = [];
@@ -1225,7 +1229,6 @@ Reglas importantes:
           .join('');
       }
 
-      // Renderizar cada paso
       const stepsContainer = document.getElementById('stepsContainer');
       stepsContainer.innerHTML = steps
         .map((step, index) => {
@@ -1239,7 +1242,6 @@ Reglas importantes:
               ? 'bg-purple-100 text-purple-800'
               : 'bg-slate-200 text-slate-800';
 
-          // Detalle columna por columna (si aplica)
           let detailHtml = '';
           if (step.operationsDetail && step.operationsDetail.length > 0) {
             detailHtml = `
@@ -1261,7 +1263,6 @@ Reglas importantes:
             `;
           }
 
-          // Matriz visual con resaltado de filas
           const matrixHtml = renderStepMatrix(step);
 
           return `
